@@ -1,5 +1,6 @@
 import Task from '../models/Task.js';
 import User from '../models/User.js';
+import DailyProgress from '../models/DailyProgress.js';
 
 // @desc    Get user tasks for today
 // @route   GET /api/tasks
@@ -87,51 +88,48 @@ export const completeTask = async (req, res) => {
         const task = await Task.findById(req.params.id);
 
         if (task && task.userId.toString() === req.user._id.toString()) {
-            if (task.completed) {
-                return res.status(400).json({ message: 'Task already completed' });
-            }
-
-            task.completed = true;
-            await task.save();
-
-            // Add XP to user
             const user = await User.findById(req.user._id);
-            user.xp += task.xpReward;
-            
-            // Level up logic (every 100 XP = 1 Level)
-            const requiredXP = user.level * 100;
-            if (user.xp >= requiredXP) {
-                user.level += 1;
-            }
-            await user.save();
-
-            // Update Daily Progress & Activity Score
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             let progress = await DailyProgress.findOne({ userId: req.user._id, date: today });
             if (!progress) {
                 progress = new DailyProgress({ userId: req.user._id, date: today });
             }
-            progress.tasksCompleted += 1;
-            progress.xpEarned += task.xpReward;
-            progress.dailyActivityScore = (progress.dailyActivityScore || 0) + task.xpReward;
-            
-            // Check if all primary/secondary/bonus missions are done
-            const allMissions = await Task.find({ 
-                userId: req.user._id, 
-                date: { $gte: today },
-                priority: { $in: ['Primary', 'Secondary', 'Bonus'] }
-            });
-            const uncompletedMissions = allMissions.filter(m => !m.completed);
-            
-            if (allMissions.length > 0 && uncompletedMissions.length === 0) {
-                // Award +5 points for completing all missions if not already awarded
-                // For simplicity, we just add 5 here on the final completion
-                if (allMissions.length === progress.tasksCompleted) {
-                    progress.dailyActivityScore += 5;
+
+            if (task.completed) {
+                // Untoggle task
+                task.completed = false;
+                user.xp = Math.max(0, user.xp - task.xpReward);
+                user.level = Math.floor(user.xp / 100) + 1;
+                
+                progress.tasksCompleted = Math.max(0, progress.tasksCompleted - 1);
+                progress.xpEarned = Math.max(0, progress.xpEarned - task.xpReward);
+                progress.dailyActivityScore = Math.max(0, (progress.dailyActivityScore || 0) - task.xpReward);
+            } else {
+                // Complete task
+                task.completed = true;
+                user.xp += task.xpReward;
+                user.level = Math.floor(user.xp / 100) + 1;
+
+                progress.tasksCompleted += 1;
+                progress.xpEarned += task.xpReward;
+                progress.dailyActivityScore = (progress.dailyActivityScore || 0) + task.xpReward;
+
+                // Check if all primary/secondary/bonus missions are done
+                const allMissions = await Task.find({ 
+                    userId: req.user._id, 
+                    date: { $gte: today },
+                    priority: { $in: ['Primary', 'Secondary', 'Bonus'] }
+                });
+                const uncompletedMissions = allMissions.filter(m => !m.completed);
+                
+                if (allMissions.length > 0 && uncompletedMissions.length === 1 && uncompletedMissions[0]._id.toString() === task._id.toString()) {
+                    progress.dailyActivityScore += 5; // Bonus for completing all
                 }
             }
 
+            await task.save();
+            await user.save();
             await progress.save();
 
             res.json({ task, xp: user.xp, level: user.level, dailyActivityScore: progress.dailyActivityScore });

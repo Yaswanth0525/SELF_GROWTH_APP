@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AuthContext } from '../context/AuthContext';
 import API from '../api/axios';
-import { Play, Pause, Square, CheckCircle, Circle, Flame, Star, Trophy } from 'lucide-react';
+import { Play, Pause, Square, CheckCircle, Circle, Flame, Star, Trophy, X } from 'lucide-react';
 
 const SvgRing = ({ progress, color }) => {
     const radius = 20;
@@ -21,7 +21,7 @@ const SvgRing = ({ progress, color }) => {
 };
 
 const Dashboard = () => {
-  const { user, logout } = useContext(AuthContext);
+  const { user, setUser, logout } = useContext(AuthContext);
   const [tasks, setTasks] = useState([]);
   const [streak, setStreak] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -83,9 +83,21 @@ const Dashboard = () => {
     try {
       const { data } = await API.put(`/tasks/${id}/complete`);
       setTasks(tasks.map(t => t._id === id ? data.task : t));
-      if(user) { user.xp = data.xp; user.level = data.level; }
+      if(user && setUser) {
+        setUser(prev => ({ ...prev, xp: data.xp, level: data.level }));
+        localStorage.setItem('userInfo', JSON.stringify({ ...user, xp: data.xp, level: data.level }));
+      }
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const handleDeleteTask = async (id) => {
+    try {
+      await API.delete(`/tasks/${id}`);
+      setTasks(tasks.filter(t => t._id !== id));
+    } catch (error) {
+      console.error('Failed to delete task', error);
     }
   };
 
@@ -158,24 +170,28 @@ const Dashboard = () => {
       {/* Main Grid: 3 columns */}
       <div className="grid grid-cols-12 gap-6">
           
-          {/* Column 1: Subjects */}
+          {/* Column 1: Time Table */}
           <div className="col-span-3 space-y-3">
-              {[
-                  { name: 'Aptitude', desc: 'Sharpen your logic.', color: '#FFC107' },
-                  { name: 'DSA', desc: 'Solve problems.', color: '#4CAF50' },
-                  { name: 'OOPS', desc: 'Code with clarity.', color: '#2196F3' },
-                  { name: 'OS', desc: 'Learn processes.', color: '#9C27B0' },
-                  { name: 'DBMS', desc: 'Work with data.', color: '#FF5722' },
-                  { name: 'Communication', desc: 'Express ideas.', color: '#00BCD4' }
-              ].map(s => (
-                  <div key={s.name} className="glass-card p-3 flex justify-between items-center hover:bg-white/5 transition-colors cursor-pointer border-l-4" style={{borderLeftColor: s.color}}>
-                      <div>
-                          <h4 className="text-sm font-bold uppercase" style={{color: s.color}}>{s.name}</h4>
-                          <p className="text-[10px] text-gray-400">{s.desc}</p>
-                      </div>
-                      <SvgRing progress={calcProgress(s.name)} color={s.color} />
+              <div className="glass-card p-5 border-t-4 border-primary">
+                  <h3 className="font-bold text-sm tracking-wider mb-6 flex items-center text-primary">
+                      <Star size={16} className="mr-2" /> DAILY SCHEDULE
+                  </h3>
+                  <div className="space-y-4">
+                      {[
+                          { time: '09:00 AM - 11:00 AM', subject: 'Aptitude', color: '#FFC107' },
+                          { time: '11:00 AM - 01:00 PM', subject: 'DSA', color: '#4CAF50' },
+                          { time: '02:30 PM - 04:00 PM', subject: 'DBMS', color: '#FF5722' },
+                          { time: '04:00 PM - 05:00 PM', subject: 'Communication', color: '#00BCD4' },
+                          { time: '06:30 PM - 09:00 PM', subject: 'OOPS / OS', color: '#2196F3' }
+                      ].map((slot, i) => (
+                          <div key={i} className="flex flex-col border-b border-white/5 pb-3 last:border-0 last:pb-0 relative pl-4">
+                              <div className="absolute left-0 top-1.5 w-2 h-2 rounded-full" style={{backgroundColor: slot.color}}></div>
+                              <span className="text-[10px] text-gray-400 font-bold mb-1">{slot.time}</span>
+                              <span className="text-sm font-black tracking-wide" style={{color: slot.color}}>{slot.subject}</span>
+                          </div>
+                      ))}
                   </div>
-              ))}
+              </div>
           </div>
 
           {/* Column 2: Center Content */}
@@ -234,11 +250,14 @@ const Dashboard = () => {
                                   {m.task ? (
                                       <div className="flex justify-between items-center mt-1">
                                           <p className={`text-xs font-semibold ${m.task.completed ? 'text-gray-500 line-through' : 'text-white'}`}>{m.task.title}</p>
-                                          {!m.task.completed ? (
-                                              <button onClick={() => handleCompleteTask(m.task._id)} className="text-[10px] bg-white/10 px-2 py-1 rounded hover:bg-white/20">Done</button>
-                                          ) : (
-                                              <CheckCircle size={14} className="text-success" />
-                                          )}
+                                          <div className="flex items-center gap-2">
+                                              {!m.task.completed ? (
+                                                  <button onClick={() => handleCompleteTask(m.task._id)} className="text-[10px] bg-white/10 px-2 py-1 rounded hover:bg-white/20">Done</button>
+                                              ) : (
+                                                  <CheckCircle onClick={() => handleCompleteTask(m.task._id)} size={14} className="text-success cursor-pointer hover:text-success/80" />
+                                              )}
+                                              <X onClick={() => handleDeleteTask(m.task._id)} size={14} className="text-gray-500 cursor-pointer hover:text-red-500 transition-colors" />
+                                          </div>
                                       </div>
                                   ) : (
                                       <div className="flex gap-2 mt-1">
@@ -275,14 +294,19 @@ const Dashboard = () => {
                       
                       <div className="space-y-2 overflow-y-auto flex-1 pr-2">
                           {planTasks.length === 0 && <p className="text-xs text-gray-500">No tasks planned.</p>}
+                          {planTasks.length > 0 && planTasks.every(t => t.completed) && (
+                              <div className="bg-success/20 border border-success/30 text-success text-xs p-2 rounded text-center font-bold mb-3 shadow-lg shadow-success/10">
+                                  🎉 Today's topics are completed!
+                              </div>
+                          )}
                           {planTasks.map(task => (
-                              <div key={task._id} onClick={() => !task.completed && handleCompleteTask(task._id)}
-                                  className="flex items-center justify-between text-xs cursor-pointer hover:bg-white/5 p-2 rounded transition">
+                              <div key={task._id} onClick={() => handleCompleteTask(task._id)}
+                                  className={`flex items-center justify-between text-xs cursor-pointer p-2 rounded transition border border-transparent ${task.completed ? 'bg-white/5' : 'hover:bg-white/10 hover:border-white/5'}`}>
                                   <div className="flex items-center gap-3 truncate max-w-[70%]">
                                       {task.completed ? <CheckCircle size={14} className="text-success shrink-0"/> : <Circle size={14} className="text-gray-500 shrink-0"/>}
-                                      <span className={`truncate ${task.completed ? 'text-gray-500 line-through' : 'text-gray-300'}`}>{task.title}</span>
+                                      <span className={`truncate ${task.completed ? 'text-gray-500 line-through' : 'text-gray-200'}`}>{task.title}</span>
                                   </div>
-                                  <span className="text-success font-bold text-[10px] shrink-0">+{task.xpReward} XP</span>
+                                  <span className={`font-bold text-[10px] shrink-0 ${task.completed ? 'text-gray-500' : 'text-success'}`}>+{task.xpReward} XP</span>
                               </div>
                           ))}
                       </div>
@@ -338,7 +362,7 @@ const Dashboard = () => {
               <div className="glass-card p-5">
                   <h3 className="font-bold text-sm mb-4">TRACK YOUR PROGRESS</h3>
                   <div className="space-y-3 text-xs font-semibold">
-                      {[ {n: 'Aptitude', p: calcProgress('Aptitude'), c: '#FFC107'}, {n: 'DSA', p: calcProgress('DSA'), c: '#4CAF50'}, {n: 'OOPS', p: calcProgress('OOPS'), c: '#2196F3'}, {n: 'OS', p: calcProgress('OS'), c: '#9C27B0'} ].map(s => (
+                      {[ {n: 'Aptitude', p: calcProgress('Aptitude'), c: '#FFC107'}, {n: 'DSA', p: calcProgress('DSA'), c: '#4CAF50'}, {n: 'OOPS', p: calcProgress('OOPS'), c: '#2196F3'}, {n: 'OS', p: calcProgress('OS'), c: '#9C27B0'}, {n: 'DBMS', p: calcProgress('DBMS'), c: '#FF5722'} ].map(s => (
                           <div key={s.n} className="flex items-center gap-3">
                               <span className="w-16 text-gray-400">{s.n}</span>
                               <div className="flex-1 bg-black/50 h-2 rounded-full overflow-hidden relative">

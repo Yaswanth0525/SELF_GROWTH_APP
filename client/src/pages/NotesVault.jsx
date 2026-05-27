@@ -17,6 +17,7 @@ const NotesVault = () => {
     const [activeCategory, setActiveCategory] = useState(initialSubject);
     const [search, setSearch] = useState(initialTopic);
     const [showForm, setShowForm] = useState(initialType !== '');
+    const [editingNoteId, setEditingNoteId] = useState(null);
     
     const [newTitle, setNewTitle] = useState(initialTopic ? `${initialTopic} - ${initialType}` : '');
     const [newSnippet, setNewSnippet] = useState('');
@@ -31,19 +32,37 @@ const NotesVault = () => {
         fetchNotes();
     }, []);
 
-    const handleCreate = async (e) => {
+    const handleSave = async (e) => {
         e.preventDefault();
         try {
-            const { data } = await API.post('/notes', { 
+            const payload = { 
                 title: newTitle, 
                 snippet: newSnippet, 
                 category: activeCategory === 'All Notes' ? 'DSA' : activeCategory 
-            });
-            setNotes([data, ...notes]);
-            setShowForm(false);
-            setNewTitle('');
-            setNewSnippet('');
+            };
+            if (editingNoteId) {
+                const { data } = await API.put(`/notes/${editingNoteId}`, payload);
+                setNotes(notes.map(n => n._id === editingNoteId ? data : n));
+            } else {
+                const { data } = await API.post('/notes', payload);
+                setNotes([data, ...notes]);
+            }
+            closeForm();
         } catch(e) { console.error(e) }
+    };
+
+    const closeForm = () => {
+        setShowForm(false);
+        setEditingNoteId(null);
+        setNewTitle('');
+        setNewSnippet('');
+    };
+
+    const openFormForEdit = (note) => {
+        setEditingNoteId(note._id);
+        setNewTitle(note.title);
+        setNewSnippet(note.snippet);
+        setShowForm(true);
     };
 
     const handleDelete = async (id, e) => {
@@ -106,7 +125,7 @@ const NotesVault = () => {
                         <div className="col-span-3 text-center py-20 text-gray-500">No notes found in this category.</div>
                     ) : (
                         filteredNotes.map(note => (
-                            <motion.div key={note._id} whileHover={{ y: -5 }} className="glass-card p-5 flex flex-col border-t-2 border-transparent hover:border-primary transition group cursor-pointer h-48">
+                            <motion.div key={note._id} onClick={() => openFormForEdit(note)} whileHover={{ y: -5 }} className="glass-card p-5 flex flex-col border-t-2 border-transparent hover:border-primary transition group cursor-pointer h-48">
                                 <div className="flex justify-between items-start mb-2">
                                     <span className="text-[10px] font-bold uppercase px-2 py-1 rounded bg-white/5 text-gray-400">{note.category}</span>
                                     <button onClick={(e) => handleDelete(note._id, e)} className="text-gray-600 hover:text-red-500 transition opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button>
@@ -120,29 +139,28 @@ const NotesVault = () => {
                 </div>
             </div>
 
-            {/* Create Modal */}
+            {/* Create / Edit Modal */}
             {showForm && (
-                <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
-                    <form onSubmit={handleCreate} className="glass-card p-8 w-[500px]">
+                <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                    <form onSubmit={handleSave} className="glass-card p-8 w-full max-w-4xl max-h-[90vh] flex flex-col">
                         <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-bold">Create Note in <span className="text-primary">{activeCategory === 'All Notes' ? 'DSA' : activeCategory}</span></h2>
-                            <button type="button" onClick={() => setShowForm(false)} className="text-gray-400 hover:text-white"><X size={20}/></button>
+                            <h2 className="text-xl font-bold">{editingNoteId ? 'Edit Note' : `Create Note in ${activeCategory === 'All Notes' ? 'DSA' : activeCategory}`}</h2>
+                            <button type="button" onClick={closeForm} className="text-gray-400 hover:text-white"><X size={20}/></button>
                         </div>
                         <input 
                             type="text" 
                             required 
                             placeholder="Note Title" 
-                            className="w-full bg-black/40 border border-white/10 rounded p-3 text-white mb-4 focus:outline-none focus:border-primary"
+                            className="w-full bg-black/40 border border-white/10 rounded p-3 text-white mb-4 focus:outline-none focus:border-primary shrink-0"
                             value={newTitle} onChange={e => setNewTitle(e.target.value)}
                         />
                         <textarea 
                             required 
                             placeholder="Start typing your notes here..." 
-                            rows={6}
-                            className="w-full bg-black/40 border border-white/10 rounded p-3 text-white mb-6 focus:outline-none focus:border-primary"
+                            className="w-full bg-black/40 border border-white/10 rounded p-3 text-white mb-6 focus:outline-none focus:border-primary flex-1 min-h-[50vh] resize-y"
                             value={newSnippet} onChange={e => setNewSnippet(e.target.value)}
                         ></textarea>
-                        <button type="submit" className="w-full bg-primary text-black font-bold py-3 rounded hover:bg-yellow-400 transition">Save Note</button>
+                        <button type="submit" className="w-full bg-primary text-black font-bold py-3 rounded hover:bg-yellow-400 transition">{editingNoteId ? 'Update Note' : 'Save Note'}</button>
                     </form>
                 </div>
             )}

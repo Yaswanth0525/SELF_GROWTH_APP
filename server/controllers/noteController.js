@@ -46,3 +46,18 @@ export const deleteNote = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+export const updateNote = async (req, res) => {
+    try {
+        const { title, snippet, category } = req.body;
+        const note = await Note.findOneAndUpdate(
+            { _id: req.params.id, userId: req.user._id },
+            { title, snippet, category },
+            { new: true }
+        );
+        if (!note) return res.status(404).json({ error: 'Note not found' });
+        res.json(note);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
