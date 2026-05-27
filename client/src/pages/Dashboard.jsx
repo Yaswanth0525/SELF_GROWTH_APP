@@ -50,7 +50,7 @@ const Dashboard = () => {
       if (!isActive) {
           setTimeLeft(selectedMinutes * 60);
       }
-  }, [selectedMinutes, isActive]);
+  }, [selectedMinutes]);
 
   const toggleTimer = () => setIsActive(!isActive);
   const resetTimer = () => { setIsActive(false); setTimeLeft(selectedMinutes * 60); };
